@@ -2,9 +2,13 @@ REPO ?= infinispan/infinispan-operator/0.3.1
 NAMESPACE ?= operator-testing
 IMAGE ?= ""
 
-.PHONY: deploy run build test all
+.PHONY: config deploy run build test all
 
 .DEFAULT_GOAL := all
+
+## config           Configure minikube
+config:
+	./config.sh ${PROFILE} ${VMDRIVER}
 
 ## deploy:          Deploy the Operator on a Minikube cluster (requires cluster admin access).
 deploy:
