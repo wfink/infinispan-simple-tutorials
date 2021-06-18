@@ -1,0 +1,226 @@
+= Remote caches with TLS (SSL) encryption and security authorization
+
+**Authors:** Wolf Fink +
+**Technologies:** Infinispan, Hot Rod, Java, SSL/TLS, RBAC +
+**Summary:** Use SSL/TLS certificates to verify Hot Rod client identities and encrypt network traffic to the server. This tutorial also demonstrates how to perform client certificate authentication and use security authorization with client certificates.
+
+== Building instructions and preparation
+
+. `$ mvn clean package`
+. Build the example certificates and keystores with the following scripts or directly with the Java keytool commands:
+* `create_unsigned_certificates.sh`
+* `create_signed_certificates.sh`
++
+These scripts create keystores and trust stores in the project directory.
+
+. Make sure you are using Java 11 at a minimum.
++
+Infinispan Server requires at least Java 11.
+Additionally the example keystores and trust stores in this tutorial use `PKCS12`, which is the recommended standard and the default from Java 11.
+. Download and start at least one Infinispan Server instance.
+
+== Unsigned Server certificates
+
+. Copy `server-keystore.pfx` to `$ISPN_HOME/server/conf`.
+. Add the `server-identities` configuration to the Infinispan Server security realm.
++
+Note that the default properties realm is removed.
++
+[source,xml]
+----
+<security-realm name="default">
+  <server-identities>
+    <ssl>
+      <keystore path="server-keystore.pfx"
+                keystore-password="secret"
+                alias="infinispan-server"/>
+    </ssl>
+  </server-identities>
+</security-realm>
+----
++
+. Create a cache named `secured` with any configuration.
++
+[source,xml]
+----
+<distributed-cache name="secured" mode="SYNC">
+  <encoding media-type="application/x-protostream"/>
+</distributed-cache>
+----
++
+. Run the client.
++
+[source]
+----
+$ export TEST=SIMPLE && mvn exec:exec
+----
+
+=== Unsigned Server certificates with client authorization
+
+. Copy `client-keystore.pfx` to `$ISPN_HOME/server/conf`.
+. Configure Infinispan Server to authenticate client certificates by adding `require-ssl-client-auth="true"` to the `endpoints` configuration.
++
+[source,xml]
+----
+<endpoints socket-binding="default"
+           security-realm="default"
+           require-ssl-client-auth="true"/>
+----
++
+. Add the `server-identities` configuration to the Infinispan Server security realm.
+. Include the `<truststore-realm/>` to authenticate certificates, which requires all public client certificates in the trust store.
++
+Note that the default properties realm is removed.
++
+[source,xml]
+----
+<security-realm name="default">
+  <server-identities>
+    <ssl>
+      <keystore path="server-keystore.pfx"
+                keystore-password="secret"
+                alias="infinispan-server"/>
+      <truststore path="client-truststore.pfx"
+                  password="ClientSecret"/>
+    </ssl>
+  </server-identities>
+  <truststore-realm/>
+</security-realm>
+----
++
+. Update the security authorization configuration for Infinispan Server to use the Common Name role mapper and define two client roles and associated permissions.
++
+In this example `Client1` and `Client2` correspond to the `cn` field in client certificates.
++
+[source,xml]
+----
+<cache-container>
+  <security>
+    <authorization>
+      <common-name-role-mapper/>
+      <role name="Client1" permissions="ALL"/>
+      <role name="Client2" permissions="READ"/>
+    </authorization>
+  </security>
+</cache-container>
+----
++
+. Create a cache with security authorization.
++
+[source,xml]
+----
+<distributed-cache name="secured" mode="SYNC">
+  <encoding media-type="application/x-protostream"/>
+  <security>
+    <authorization/>
+  <security>
+</distributed-cache>
+----
++
+. Run the clients.
++
+[source]
+----
+$ export TEST=SIMPLEAUTH && mvn exec:exec
+----
+
+== Signed server keystore with client verification
+
+Using certificates signed by a public CA means that Infinispan Server does not need to a trust store that contains all dedicated client certificates.
+If client certificates are signed with the public CA certificate, Infinispan Server can trust them.
+
+. Copy `server_keystore.p12` and `server_truststore.p12` to `$ISPN_HOME/server/conf`.
+. Add the `server-identities` configuration to the Infinispan Server security realm.
++
+Note that the default properties realm is removed.
++
+[source,xml]
+----
+<security-realm name="default">
+  <server-identities>
+    <ssl>
+      <keystore path="server_keystore.p12"
+                keystore-password="Serversecret"
+                alias="infinispan-server"/>
+      <truststore path="server_truststore.p12"
+                  password="ServerTrustsecret"/>
+    </ssl>
+  </server-identities>
+</security-realm>
+----
++
+. Configure Infinispan Server to authenticate client certificates by adding `require-ssl-client-auth="true"` to the `endpoints` configuration.
++
+[source,xml]
+----
+<endpoints socket-binding="default"
+           security-realm="default"
+           require-ssl-client-auth="true"/>
+----
++
+. Run the clients.
++
+[source]
+----
+$ export TEST=CLIENT1,CLIENT2 && mvn exec:exec
+----
++
+. Check that both clients successfully complete.
+
+=== Signed Server certificates with client authorization
+
+. Update the security authorization configuration for Infinispan Server to use the Common Name role mapper and define two client roles and associated permissions.
++
+In this example `Client1` and `Client2` correspond to the `cn` field in client certificates.
++
+[source,xml]
+----
+<cache-container>
+  <security>
+    <authorization>
+      <common-name-role-mapper/>
+      <role name="Client1" permissions="ALL"/>
+      <role name="Client2" permissions="READ"/>
+    </authorization>
+  </security>
+</cache-container>
+----
++
+. Create a cache with security authorization.
++
+[source,xml]
+----
+<distributed-cache name="secured" mode="SYNC">
+  <encoding media-type="application/x-protostream"/>
+  <security>
+    <authorization/>
+  <security>
+</distributed-cache>
+----
++
+. Include the `<truststore-realm/>` to authenticate certificates, which requires all public client certificates in the trust store.
++
+[source,xml]
+----
+  <security-realm name="default">
+    <server-identities .../>
+    <truststore-realm/>
+  </security-realm>
+----
++
+. Run the clients.
++
+[source]
+----
+$ export TEST=CLIENT1AUTH,CLIENT2AUTH && mvn exex:exec
+----
+
+The clients now fail as it is mandatory to have all client certificates available within the truststore.
+
+. Run `$ create_signed_server_truststore_auth.sh`
+. Copy `server_truststoreAuth.p12` to `$ISPN_HOME/server/conf` and update the truststore configuration.
+. Run the client again and check that `Client1` succeeds and `Client2` fails to put entries into the cache as expected.
+
+== Troubleshooting
+
+To debug failures, enable `org.wildfly.security` and `org.infinispan.security` logging with TRACE level messages.
