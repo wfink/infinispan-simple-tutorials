@@ -9,9 +9,8 @@ import org.infinispan.client.hotrod.configuration.ConfigurationBuilder;
 import org.infinispan.client.hotrod.impl.ConfigurationProperties;
 
 /**
- * Different client configurations to demonstrate SSL encryption with
- * server and client certificates to verify the connection requests.
- * As well as using authentication by the clients certificates.
+ * Different client configurations that demonstrate SSL/TLS encryption with
+ * server and client certificates as well as security authorization.
  *
  * @author <a href="mailto:WolfDieter.Fink@gmail.com">Wolf-Dieter Fink</a>
  *
