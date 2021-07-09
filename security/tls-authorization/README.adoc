@@ -4,27 +4,38 @@
 **Technologies:** Infinispan, Hot Rod, Java, SSL/TLS, RBAC +
 **Summary:** Use SSL/TLS certificates to verify Hot Rod client identities and encrypt network traffic to the server. This tutorial also demonstrates how to perform client certificate authentication and use security authorization with client certificates.
 
-== Building instructions and preparation
+== Build instructions and preparation
 
-. Make sure you are using Java 11 at a minimum.
+. Install Java 11 or later.
 +
-Infinispan Server requires at least Java 11.
-Additionally the example keystores and trust stores in this tutorial use `PKCS12`, which is the recommended standard and the default from Java 11.
-Java8 keytool will prompt for a password which can be prevented by adding `-keypass` to some of the commands. The storetype is already set.
-. Run the command to build the project
-* `$ mvn clean package`
-. Build the example certificates and keystores with the following scripts or directly with the Java keytool commands:
-* `create_unsigned_certificates.sh`
-* `create_signed_certificates.sh`
+This tutorial requires Java 11 at minimum.
 +
-These scripts create keystores and trust stores in the project directory.
-. Download at least one Infinispan Server instance.
+To complete these procedures, you need to generate TLS artifacts with the Java keytool, including certificates, keystores, and trust stores.
++
+The example keystores and trust stores are in PKCS12 format, which is the recommended standard.
+If you attempt to generate the TLS artifacts with older Java versions, you get prompted for missing arguments and keytool commands fail.
+
+. Build the project.
++
+----
+$ mvn clean package
+----
+. Download and start at least one Infinispan Server instance.
 
 == Unsigned Server certificates
 
+. Generate the example self-signed keystore and trust store.
++
+----
+$ sh create_unsigned_certificates.sh
+----
++
+If you prefer, run the Java keytool commands directly.
++
 . Copy `server-keystore.pfx` to `$ISPN_HOME/server/conf`.
 . Copy `server/infinispan-uCert.xml` to `$ISPN_HOME/server/conf`.
-. This configuration, `infinispan-uCert.xml` contains the following changes:
++
+The `infinispan-uCert.xml` configuration applies the following changes:
 +
 Note that the default properties realm is removed.
 +
@@ -48,7 +59,7 @@ Note that the default properties realm is removed.
 </distributed-cache>
 ----
 +
-. Start the server.
+. Start the server with the `infinispan-uCert.xml` configuration.
 +
 [source]
 ----
@@ -61,13 +72,16 @@ $ `$ISPN_HOME/bin/server.sh -c infinispan-uCert.xml`
 ----
 $ export TEST=SIMPLE && mvn exec:exec@run
 ----
-. Check that the put and get succeeds.
+. Check server logs to verify that the PUT and GET requests succeed.
 
-=== Unsigned Server certificates with client authorization
+=== Unsigned server certificates with client authorization
+
+Add security authorization to assign client permissions based on TLS identities.
 
 . Copy `client-truststore.pfx` to `$ISPN_HOME/server/conf`.
 . Copy `server/infinispan-uCertAuth.xml` to `$ISPN_HOME/server/conf`.
-. This configuration, `infinispan-uCertAuth.xml` contains the following changes:
++
+The `infinispan-uCertAuth.xml` configuration applies the following changes:
 +
 [source,xml]
 ----
@@ -116,30 +130,41 @@ $ export TEST=SIMPLE && mvn exec:exec@run
 </distributed-cache>
 ----
 +
-. Start the server.
+. Start the server with the `infinispan-uCertAuth.xml` configuration.
 +
 [source]
 ----
 $ `$ISPN_HOME/bin/server.sh -c infinispan-uCertAuth.xml`
 ----
 +
-. Run the client.
+. Run the clients.
 +
 [source]
 ----
 $ export TEST=SIMPLEAUTH && mvn exec:exec@run
 ----
-. Check that put and get succeeds as Client1 is used.
-. Check that put fail for Client2 as there is no permission for WRITE, the client will show an error and you might see it within the server.log as well.
+. Check the server logs.
++
+PUT and GET requests succeed for Client1 which has ALL permissions.
+However, Client2 does not have WRITE permission to the cache so the client returns an error.
 
-== Signed server keystore with client verification
+== Signed server keystore with client certificate verification
 
-Using certificates signed by a public CA means that Infinispan Server does not need to a trust store that contains all dedicated client certificates.
-If client certificates are signed with the public CA certificate, Infinispan Server can trust them.
+Using certificates signed by a public CA means that Infinispan Server does not need a trust store that contains all public client certificates.
+If the trust store contains only the CA certificate then Infinispan Server can trust any client certificates that are signed by the CA.
 
+. Generate the example CA-signed keystore and trust store.
++
+----
+$ sh create_signed_certificates.sh
+----
++
+If you prefer, run the Java keytool commands directly.
++
 . Copy `server_keystore.p12` and `server_truststore.p12` to `$ISPN_HOME/server/conf`.
 . Copy `server/infinispan-sCert.xml` to `$ISPN_HOME/server/conf`.
-. This configuration, `infinispan-sCert.xml` contains the following changes:
++
+The `infinispan-sCert.xml` configuration applies the following changes:
 +
 [source,xml]
 ----
@@ -170,7 +195,7 @@ If client certificates are signed with the public CA certificate, Infinispan Ser
 </distributed-cache>
 ----
 +
-. Start the server.
+. Start the server with the `infinispan-sCert.xml` configuration.
 +
 [source]
 ----
@@ -184,13 +209,16 @@ $ `$ISPN_HOME/bin/server.sh -c infinispan-sCert.xml`
 $ export TEST=CLIENT1,CLIENT2 && mvn exec:exec@run
 ----
 +
-. Check that both clients successfully complete.
+. Check server logs to verify that the PUT and GET requests succeed.
 
-=== Signed Server certificates with client authorization
+=== Signed Server certificates with client certificate authentication and authorization
+
+Add security authorization to assign client permissions based on TLS identities.
 
 . Copy `server_keystore.p12` and `server_truststore.p12` to `$ISPN_HOME/server/conf`.
 . Copy `server/infinispan-sCertAuth.xml` to `$ISPN_HOME/server/conf`.
-. This configuration, `infinispan-sCertAuth.xml` contains the following changes:
++
+The `infinispan-sCertAuth.xml` configuration applies the following changes:
 +
 [source,xml]
 ----
@@ -239,7 +267,7 @@ $ export TEST=CLIENT1,CLIENT2 && mvn exec:exec@run
            require-ssl-client-auth="true"/>
 ----
 +
-. Start the server.
+. Start the server with the `infinispan-sCertAuth.xml` configuration.
 +
 [source]
 ----
@@ -253,11 +281,36 @@ $ `$ISPN_HOME/bin/server.sh -c infinispan-sCertAuth.xml`
 $ export TEST=CLIENT1AUTH,CLIENT2AUTH && mvn exec:exec@run
 ----
 
-The clients now fail as it is mandatory to have all client certificates available within the truststore.
+Client requests fail because the `<truststore-realm/>` element is now included in the security realm configuration.
+This enforces client certificate authentication so that the trust store must contain all public certificates, not just the CA chain.
 
-. Run `$ create_signed_server_truststore_auth.sh`
-. Copy `server_truststoreAuth.p12` to `$ISPN_HOME/server/conf` and update the truststore configuration.
-. Run the client again and check that `Client1` succeeds and `Client2` fails to put entries into the cache as expected.
+Continue with the following steps to complete the tutorial:
+
+. Run `$ create_signed_server_truststore_auth.sh` and generate the client trust store.
+. Copy `server_truststoreAuth.p12` to `$ISPN_HOME/server/conf` and update the truststore configuration as follows:
++
+[source,xml]
+----
+<security-realm name="default">
+  <server-identities>
+    <ssl>
+      <keystore .../>
+      <truststore path="server_truststoreAuth.p12"
+                  password="ServerTrustsecret"/>
+    ...
+----
++
+. Run the clients.
++
+[source]
+----
+$ export TEST=CLIENT1AUTH,CLIENT2AUTH && mvn exec:exec@run
+----
++
+. Check the server logs.
++
+PUT and GET requests succeed for Client1 which has ALL permissions.
+However, Client2 does not have WRITE permission to the cache so the client returns an error.
 
 == Troubleshooting
 
@@ -266,4 +319,3 @@ To debug failures, enable `org.wildfly.security` and `org.infinispan.security` l
 Note that `mvn clean` will delete the certificates, a new build will create it but they are then different and the connection to an existing server with older certificates will fail.
 
 Consider that running the client needs `mvn exec:exec@run` to not fail as there are multiple executions defined.
-
